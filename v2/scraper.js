@@ -1,11 +1,11 @@
 const puppeteer = require("puppeteer-extra");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
-const PromisePool = require('es6-promise-pool');
+const PromisePool = require("es6-promise-pool");
 
 puppeteer.use(StealthPlugin());
 
 const launchOptions = {
-  headless: (process.env.PUPPETEER_HEADLESS == 1 ? true : false),
+  headless: process.env.PUPPETEER_HEADLESS == 1 ? true : false,
   executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
   args: ["--disable-dev-shm-usage", "--no-sandbox"],
 };
@@ -18,7 +18,6 @@ if (process.env.PROXY_HOST && process.env.PROXY_PORT) {
 
 class Scraper {
   async getHtml(searchQuery) {
-
     let browser;
 
     // How many urls we want to process in parallel.
@@ -27,11 +26,12 @@ class Scraper {
 
     let URLS = [];
     let results = [];
+    let scrollTries = 0;
 
     const defaultDelay = 300; // Increase this if running on a laggy browser or device
     let debugBool = true;
     let debug = {
-      log: (...strings) => debugBool && console.log(strings.join(' ')),
+      log: (...strings) => debugBool && console.log(strings.join(" ")),
     };
 
     // Get the data
@@ -44,37 +44,34 @@ class Scraper {
         await page.waitForSelector('[role="main"]').catch(movingOn);
 
         //Shop Name
-        let shopName =
-          (await page.$eval('[role="main"]', element =>
-            element.getAttribute('aria-label')
-          )) || 'No shop name provided';
+        let shopName = (await page.$eval('[role="main"]', (element) => element.getAttribute("aria-label"))) || "No shop name provided";
 
         //Shop Address
         let address = await page.evaluate(() => {
-          const elem = document.querySelector('button[data-item-id="address"]')
+          const elem = document.querySelector('button[data-item-id="address"]');
           if (elem) {
-            return elem.innerText
+            return elem.innerText;
           } else {
-            return ''
+            return "";
           }
         });
 
         //Website
         let website = await page.evaluate(() => {
-          const elem = document.querySelector('[data-tooltip="Open website"]')
+          const elem = document.querySelector('[data-tooltip="Open website"]');
           if (elem) {
-            return elem.innerText
+            return elem.innerText;
           } else {
-            return ''
+            return "";
           }
         });
 
         //Phone
         const phoneElement = (await page.$x('//button[contains(@aria-label, "Phone: ")]'))[0];
-        let phone = await page.evaluate(el => {
-          var result = el?.getAttribute('data-item-id')?.replace('phone:tel:', '')
+        let phone = await page.evaluate((el) => {
+          var result = el?.getAttribute("data-item-id")?.replace("phone:tel:", "");
 
-          return (result ? result : '');
+          return result ? result : "";
         }, phoneElement);
 
         let result = {
@@ -94,69 +91,59 @@ class Scraper {
       }
     }
 
-    //Get Links
-    async function getLinks(page) {
-      // Scrolling to bottom of page
-      let newScrollHeight = 0;
-      let scrollHeight = 1000;
-      let divSelector = '#pane > div > div > div > div > div:nth-child(2) > div';
-
-      debug.log('Waiting for the page to load in');
+    async function scrollPage(page, scrollContainer) {
+      scrollTries++;
+      debug.log("Waiting for the page to load in");
       await page.waitForTimeout(defaultDelay * 11);
 
-      debug.log('Starting to scroll now');
+      debug.log("Starting to scroll now");
+
+      let lastHeight = await page.evaluate(
+        `document.querySelector("${scrollContainer}").scrollHeight`
+      );
+
       while (true) {
-        await page.waitForSelector(divSelector).catch(error => {
-          debug.log('Unable to find results pane. Selector: ', divSelector);
-          throw new Error(error);
-        });
-
         await page.evaluate(
-          (scrollHeight, divSelector) =>
-            document.querySelector(divSelector).scrollTo(0, scrollHeight),
-          scrollHeight,
-          divSelector
+          `document.querySelector("${scrollContainer}").scrollTo(0, document.querySelector("${scrollContainer}").scrollHeight)`
         );
 
-        await page.waitForTimeout(defaultDelay);
+        await page.waitForTimeout(defaultDelay * 11);
 
-        newScrollHeight = await page.$eval(
-          divSelector,
-          div => div.scrollHeight
+        let newHeight = await page.evaluate(
+          `document.querySelector("${scrollContainer}").scrollHeight`
         );
-        debug.log('scrolled by', newScrollHeight);
 
-        if (scrollHeight === newScrollHeight) {
+        if (newHeight === lastHeight) {
           break;
-        } else {
-          scrollHeight = newScrollHeight;
         }
+
+        lastHeight = newHeight;
       }
-      debug.log('finished scrolling');
+
+      debug.log("finished scrolling");
 
       // Get results
       const searchResults = await page.evaluate(() =>
-        Array.from(document.querySelectorAll('a'))
-          .map(el => el.href)
+        Array.from(document.querySelectorAll("a"))
+          .map((el) => el.href)
           .filter(
-            link =>
+            (link) =>
               link.match(/https:\/\/www.google.com\/maps\//g, link) &&
               !link.match(/\=https:\/\/www.google.com\/maps\//g, link)
           )
       );
-
-      //console.log(searchResults);
-      debug.log('I got', searchResults.length, 'results');
+      
+      debug.log("I got", searchResults.length, "results");
 
       return searchResults;
     }
 
     function movingOn() {
-      debug.log('Wait timed out, moving on...');
+      debug.log("Wait timed out, moving on...");
     }
 
     function genericMovingOn() {
-      debug.log('Recieved an error, attempting to move on...');
+      debug.log("Recieved an error, attempting to move on...");
     }
 
     const promiseProducer = () => {
@@ -184,12 +171,11 @@ class Scraper {
         });
       }
 
-      //await page.setDefaultNavigationTimeout(0);
-
       await page.goto("https://www.google.com/maps/?hl=en&q=" + searchQuery);
 
       try {
-        const agree_button_xpath = '//button/span[.="I agree"]';
+        //const agree_button_xpath = '//button/span[.="I agree"]';
+        const agree_button_xpath = "/html/body/c-wiz/div/div/div/div[2]/div[1]/div[3]/div[1]/div[1]/form[2]/div/div/button/div[3]";
         await page.waitForXPath(agree_button_xpath);
         const elements = await page.$x(agree_button_xpath);
         await elements[0].click();
@@ -202,22 +188,13 @@ class Scraper {
       }
 
       while (true) {
-        const nextPageDisabled = (await page.$x('//button[contains(@aria-label, " Next page ") and @disabled]'))[0];
-        const noResultsFound = (await page.$x('//div[contains(text(), "No results found")]'))[0];
+        const noResultsFound = (await page.$x('//div[contains(text(), "Google Maps can\'t find")]'))[0];
+        const endOfList = (await page.$x('//span[contains(text(), "You\'ve reached the end of the list")]'))[0];
 
-        if (noResultsFound || nextPageDisabled) break;
+        if (noResultsFound || endOfList || scrollTries >=5) break;
 
         // If it hasn't go to the next page
-        URLS.push(...(await getLinks(page).catch(genericMovingOn)));
-
-        await page
-          .$eval('button[aria-label=" Next page "]', element =>
-            element.click()
-          )
-          .catch(genericMovingOn);
-        debug.log('moving to the next page');
-
-        await page.waitForNavigation({ waitUntil: 'domcontentloaded' }).catch(movingOn);
+        URLS.push(...(await scrollPage(page, "div[aria-label^='Results for' i]").catch(genericMovingOn)));
       }
 
       URLS = Array.from(new Set(URLS));
@@ -228,13 +205,13 @@ class Scraper {
       const pool = new PromisePool(promiseProducer, CONCURRENCY);
       await pool.start();
 
-      results = results.filter(Boolean)
+      results = results.filter(Boolean);
 
       // Print results.
-      console.log('Results:');
+      console.log("Results:");
       console.log(JSON.stringify(results, null, 2));
 
-      debug.log("Scrape complete!")
+      debug.log("Scrape complete!");
 
       return results;
     } finally {
