@@ -198,7 +198,7 @@ class Scraper {
 
       // How many urls we want to process in parallel.
       const CONCURRENCY = Number(process.env.CONCURRENCY) || 5;
-      debug.info(`Concurrency: ${CONCURRENCY}`);
+      debug.log(`Concurrency: ${CONCURRENCY}`);
 
       // Runs thru all the urls in a pool of given concurrency.
       const pool = new PromisePool(promiseProducer, CONCURRENCY);
