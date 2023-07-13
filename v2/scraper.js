@@ -20,10 +20,6 @@ class Scraper {
   async getHtml(searchQuery) {
     let browser;
 
-    // How many urls we want to process in parallel.
-    const CONCURRENCY = Number(process.env.CONCURRENCY) || 5;
-    console.info(`Concurrency: ${CONCURRENCY}`);
-
     let URLS = [];
     let results = [];
     let scrollTries = 0;
@@ -31,7 +27,7 @@ class Scraper {
     const defaultDelay = 300; // Increase this if running on a laggy browser or device
     let debugBool = true;
     let debug = {
-      log: (...strings) => debugBool && console.log(strings.join(" ")),
+      log: (...strings) => debugBool && console.log(`[${(new Date().toISOString())}]`, strings.join(" ")),
     };
 
     // Get the data
@@ -83,8 +79,8 @@ class Scraper {
 
         results.push(result);
       } catch (error) {
-        console.log(`Unable get data from ${url}`);
-        console.log(error);
+        debug.log(`Unable get data from ${url}`);
+        debug.log(error);
       } finally {
         debug.log(`Closing ${url}`);
         await page.close();
@@ -109,9 +105,8 @@ class Scraper {
 
         await page.waitForTimeout(defaultDelay * 11);
 
-        let newHeight = await page.evaluate(
-          `document.querySelector("${scrollContainer}").scrollHeight`
-        );
+        let newHeight = await page.evaluate(`document.querySelector("${scrollContainer}").scrollHeight`);
+        debug.log('scrolled by', newHeight);
 
         if (newHeight === lastHeight) {
           break;
@@ -156,10 +151,10 @@ class Scraper {
       throw new Error("No param: q");
     }
 
-    console.log(`Search query: ${searchQuery}`);
+    debug.log(`Search query: ${searchQuery}`);
 
     browser = await puppeteer.launch(launchOptions);
-    console.log(await browser.version());
+    debug.log(await browser.version());
 
     try {
       const page = await browser.newPage();
@@ -184,7 +179,7 @@ class Scraper {
 
         //await page.waitForTimeout(defaultDelay * 10);
       } catch (error) {
-        console.log("The button 'I agree' didn't appear.");
+        debug.log("The button 'I agree' didn't appear.");
       }
 
       while (true) {
@@ -199,7 +194,11 @@ class Scraper {
 
       URLS = Array.from(new Set(URLS));
 
-      console.log(URLS);
+      debug.log(URLS);
+
+      // How many urls we want to process in parallel.
+      const CONCURRENCY = Number(process.env.CONCURRENCY) || 5;
+      debug.info(`Concurrency: ${CONCURRENCY}`);
 
       // Runs thru all the urls in a pool of given concurrency.
       const pool = new PromisePool(promiseProducer, CONCURRENCY);
@@ -208,7 +207,7 @@ class Scraper {
       results = results.filter(Boolean);
 
       // Print results.
-      console.log("Results:");
+      debug.log("Results:");
       console.log(JSON.stringify(results, null, 2));
 
       debug.log("Scrape complete!");

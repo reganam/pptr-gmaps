@@ -6,7 +6,7 @@ const Scraper2 = require("./v2/scraper");
 
 const port = Number(process.env.PORT || 3000);
 
-console.info(`Browser will be running in ${(process.env.PUPPETEER_HEADLESS == 1 ? 'headless' : 'headfull')} mode`);
+console.info(`[${(new Date().toISOString())}] Browser will be running in ${(process.env.PUPPETEER_HEADLESS == 1 ? 'headless' : 'headfull')} mode`);
 
 const app = express();
 
@@ -47,5 +47,5 @@ app.get("/v2/", async (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`server started on port ${port}`);
+  console.log(`[${(new Date().toISOString())}] server started on port ${port}`);
 });
