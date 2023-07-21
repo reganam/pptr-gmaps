@@ -1,6 +1,7 @@
 const puppeteer = require("puppeteer-extra");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 const PromisePool = require("es6-promise-pool");
+const { waitForNetworkIdle } = require('../utils');
 
 puppeteer.use(StealthPlugin());
 
@@ -17,12 +18,13 @@ if (process.env.PROXY_HOST && process.env.PROXY_PORT) {
 }
 
 class Scraper {
-  async getHtml(searchQuery) {
+  async getHtml(searchQuery, pages) {
     let browser;
 
     let URLS = [];
     let results = [];
     let scrollTries = 0;
+    let reachedMaxSearchResults = false;
 
     const defaultDelay = 300; // Increase this if running on a laggy browser or device
     let debugBool = true;
@@ -89,8 +91,6 @@ class Scraper {
 
     async function scrollPage(page, scrollContainer) {
       scrollTries++;
-      debug.log("Waiting for the page to load in");
-      await page.waitForTimeout(defaultDelay * 11);
 
       debug.log("Starting to scroll now");
 
@@ -99,6 +99,15 @@ class Scraper {
       );
 
       while (true) {
+        let scrollContainerResults = (await page.$$(`${scrollContainer} a`)).length;
+        debug.log('links found:', scrollContainerResults);
+
+        if (scrollContainerResults >= pages) {
+          debug.log("Reached max search results. Stopping...");
+          reachedMaxSearchResults = true;
+          break;
+        }
+
         await page.evaluate(
           `document.querySelector("${scrollContainer}").scrollTo(0, document.querySelector("${scrollContainer}").scrollHeight)`
         );
@@ -117,20 +126,7 @@ class Scraper {
 
       debug.log("finished scrolling");
 
-      // Get results
-      const searchResults = await page.evaluate(() =>
-        Array.from(document.querySelectorAll("a"))
-          .map((el) => el.href)
-          .filter(
-            (link) =>
-              link.match(/https:\/\/www.google.com\/maps\//g, link) &&
-              !link.match(/\=https:\/\/www.google.com\/maps\//g, link)
-          )
-      );
-      
-      debug.log("I got", searchResults.length, "results");
-
-      return searchResults;
+      return true;
     }
 
     function movingOn() {
@@ -152,6 +148,7 @@ class Scraper {
     }
 
     debug.log(`Search query: ${searchQuery}`);
+    debug.log(`Pages count: ${pages}`);
 
     browser = await puppeteer.launch(launchOptions);
     debug.log(await browser.version());
@@ -169,32 +166,50 @@ class Scraper {
       await page.goto("https://www.google.com/maps/?hl=en&q=" + searchQuery);
 
       try {
-        //const agree_button_xpath = '//button/span[.="I agree"]';
         const agree_button_xpath = "/html/body/c-wiz/div/div/div/div[2]/div[1]/div[3]/div[1]/div[1]/form[2]/div/div/button/div[3]";
         await page.waitForXPath(agree_button_xpath);
         const elements = await page.$x(agree_button_xpath);
         await elements[0].click();
-
-        await page.waitForNavigation({ waitUntil: "domcontentloaded" });
-
-        //await page.waitForTimeout(defaultDelay * 10);
       } catch (error) {
         debug.log("The button 'I agree' didn't appear.");
       }
+
+      debug.log("Waiting for the page to load in");
+      await waitForNetworkIdle(page, 600, 0);
+
+      const scrollContainerSelector = "div[aria-label^='Results for' i]";
 
       while (true) {
         const noResultsFound = (await page.$x('//div[contains(text(), "Google Maps can\'t find")]'))[0];
         const endOfList = (await page.$x('//span[contains(text(), "You\'ve reached the end of the list")]'))[0];
 
-        if (noResultsFound || endOfList || scrollTries >=5) break;
-
-        // If it hasn't go to the next page
-        URLS.push(...(await scrollPage(page, "div[aria-label^='Results for' i]").catch(genericMovingOn)));
+        if (noResultsFound || endOfList || scrollTries >=5 || reachedMaxSearchResults) {
+          break;
+        }
+        
+        await scrollPage(page, scrollContainerSelector).catch(genericMovingOn);
       }
+      
+      URLS.push(
+        ...(await page.evaluate((scrollContainerSelector) => {
+          return Array.from(
+            document.querySelectorAll(`${scrollContainerSelector} a`)
+          )
+            .map((el) => el.href)
+            .filter(
+              (link) =>
+                link.match(/https:\/\/www.google.com\/maps\//g, link) &&
+                !link.match(/\=https:\/\/www.google.com\/maps\//g, link) &&
+                !link.includes(
+                  "reserve"
+                ) /* excludes links containing the word 'reserve' */
+            );
+        }, scrollContainerSelector))
+      );
 
       URLS = Array.from(new Set(URLS));
 
-      debug.log(URLS);
+      debug.log(JSON.stringify(URLS, null, 2));
 
       // How many urls we want to process in parallel.
       const CONCURRENCY = Number(process.env.CONCURRENCY) || 5;

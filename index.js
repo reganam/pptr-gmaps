@@ -32,10 +32,12 @@ app.get("/v2/", async (req, res) => {
   var scraper = new Scraper2();
   
   var i = req.url.indexOf('?');
-  var searchQuery = req.url.substr(i+3);  
+  var searchQuery = req.url.substr(i+3);
+
+  var pages = Number(req.query.p) || 20;
 
   scraper
-    .getHtml(searchQuery)
+    .getHtml(searchQuery, pages)
     .then(function (result) {
       return res.json(result);
     })
