@@ -2,20 +2,14 @@ const puppeteer = require("puppeteer-extra");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 const PromisePool = require("es6-promise-pool");
 const { waitForNetworkIdle } = require('../utils');
+const proxyChain = require('proxy-chain');
 
 puppeteer.use(StealthPlugin());
 
-const launchOptions = {
-  headless: process.env.PUPPETEER_HEADLESS == 1 ? true : false,
-  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
-  args: ["--disable-dev-shm-usage", "--no-sandbox"],
-};
-
-if (process.env.PROXY_HOST && process.env.PROXY_PORT) {
-  launchOptions["args"].push(
-    `--proxy-server=${process.env.PROXY_HOST}:${process.env.PROXY_PORT}`
-  );
-}
+const proxy_host = process.env.PROXY_HOST;
+const proxy_port = process.env.PROXY_PORT;
+const proxy_user = process.env.PROXY_USER;
+const proxy_pass = process.env.PROXY_PASS;
 
 class Scraper {
   async getHtml(searchQuery, pages) {
@@ -150,18 +144,37 @@ class Scraper {
     debug.log(`Search query: ${searchQuery}`);
     debug.log(`Pages count: ${pages}`);
 
+    const launchOptions = {
+      headless: process.env.PUPPETEER_HEADLESS == 1 ? true : false,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
+      args: ["--disable-dev-shm-usage", "--no-sandbox"],
+    };
+    
+    if (proxy_host || proxy_port || proxy_user || proxy_pass) {
+      var proxy_url = null;
+      if (proxy_user && proxy_pass) {
+        proxy_url = `http://${proxy_user}:${proxy_pass}@${proxy_host}:${proxy_port}`;
+      } else {
+        proxy_url = `http://${proxy_host}:${proxy_port}`;
+      }
+    
+      debug.log('Proxy configured');
+    
+      const currentProxyUrl = proxy_url;
+      const anonymizedProxyUrl = await proxyChain.anonymizeProxy(currentProxyUrl);
+    
+      launchOptions["args"].push(
+        `--proxy-server=${anonymizedProxyUrl}`
+      );
+    } else {
+      debug.log('Without proxy');
+    }
+
     browser = await puppeteer.launch(launchOptions);
     debug.log(await browser.version());
 
     try {
       const page = await browser.newPage();
-
-      if (process.env.PROXY_USER && process.env.PROXY_PASS) {
-        await page.authenticate({
-          username: process.env.PROXY_USER,
-          password: process.env.PROXY_PASS,
-        });
-      }
 
       await page.goto("https://www.google.com/maps/?hl=en&q=" + searchQuery);
 
