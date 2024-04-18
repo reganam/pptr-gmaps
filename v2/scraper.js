@@ -165,7 +165,7 @@ class Scraper {
     
       launchOptions["args"].push(
         `--proxy-server=${anonymizedProxyUrl}`
-      );
+      );      
     } else {
       debug.log('Without proxy');
     }
@@ -175,6 +175,9 @@ class Scraper {
 
     try {
       const page = await browser.newPage();
+
+      //await page.goto("https://whatismyipaddress.com");
+      //await page.waitForTimeout(10000);
 
       await page.goto("https://www.google.com/maps/?hl=en&q=" + searchQuery);
 
@@ -187,8 +190,9 @@ class Scraper {
         debug.log("The button 'I agree' didn't appear.");
       }
 
-      debug.log("Waiting for the page to load in");
-      await waitForNetworkIdle(page, 600, 0);
+      //debug.log("Waiting for the page to load in");
+      //await waitForNetworkIdle(page, 600, 0);
+      await page.waitForSelector('.fontTitleLarge');
 
       const scrollContainerSelector = "div[aria-label^='Results for' i]";
 
