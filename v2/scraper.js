@@ -178,17 +178,20 @@ class Scraper {
 
       await page.goto("https://www.google.com/maps/?hl=en&q=" + searchQuery);
 
-      try {
-        const agree_button_xpath = "/html/body/c-wiz/div/div/div/div[2]/div[1]/div[3]/div[1]/div[1]/form[2]/div/div/button/div[3]";
-        await page.waitForXPath(agree_button_xpath);
+      await page.click('#yDmH0d > c-wiz > div > div > div > div.NIoIEf > div.G4njw > div.AIC7ge > div.CxJub > div.VtwTSb > form:nth-child(2) > div > div > button > div.VfPpkd-RLmnJb');
+
+      /*try {
+        const agree_button_xpath = "html/body/c-wiz/div/div/div/div[2]/div[1]/div[3]/div[1]/div[1]/form[2]/div/div/button";        
+        await page.waitForSelector() //waitForSelector(agree_button_xpath);
         const elements = await page.$x(agree_button_xpath);
         await elements[0].click();
       } catch (error) {
         debug.log("The button 'I agree' didn't appear.");
-      }
+      }*/
 
       debug.log("Waiting for the page to load in");
-      await waitForNetworkIdle(page, 600, 0);
+      //await waitForNetworkIdle(page, 600, 0);
+      await page.waitForNetworkIdle();
 
       const scrollContainerSelector = "div[aria-label^='Results for' i]";
 
