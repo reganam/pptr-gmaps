@@ -17,6 +17,8 @@ If all is provided than proxy url will be:
 If only `PROXY_HOST` and `PROXY_PORT` is provided than proxy url will be:
 `http://${proxy_host}:${proxy_port}`
 
+`$env:PUPPETEER_EXECUTABLE_PATH = 'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe'`
+
 ### Development
 
 `npm install`
